@@ -92,11 +92,19 @@
     <main>
       <h1>URL Shortener Microservice</h1>
       <p class="subtitle">Submit a URL and receive a numeric short URL that redirects to it.</p>
+<form action="/api/shorturl" method="POST">
+  <input
+    type="text"
+    name="url"
+    id="url_input"
+    placeholder="https://www.example.com"
+    required
+  />
 
-      <form action="/api/shorturl" method="POST">
-        <input type="text" name="url" placeholder="https://www.example.com" aria-label="URL to shorten" required />
-        <button type="submit">Shorten URL</button>
-      </form>
+  <button type="submit">
+    POST URL
+  </button>
+</form>
 
       <h2>Example usage</h2>
       <ul>

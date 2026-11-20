@@ -1,69 +1,95 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+const dns = require("dns");
+
 const app = express();
 
-// Basic Configuration
 const port = process.env.PORT || 3000;
 
-// Enable CORS for freeCodeCamp tests
+// Middleware
 app.use(cors());
-
-// Body parsing middleware (must come BEFORE routes)
-app.use(express.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.json());
 
-// Serve static files
-app.use('/public', express.static(`${process.cwd()}/public`));
+// Static files
+app.use("/public", express.static(`${process.cwd()}/public`));
 
-// Serve the main HTML page
-app.get('/', function(req, res) {
-  res.sendFile(process.cwd() + '/views/index.html');
+// Home page
+app.get("/", function (req, res) {
+  res.sendFile(process.cwd() + "/views/index.html");
 });
 
-// In-memory storage for URLs
-const urls = [];
+// Store shortened URLs
+const urlDatabase = [];
+let counter = 1;
 
-// POST endpoint to shorten a URL
-app.post('/api/shorturl', function(req, res) {
+// Validate URL
+function isValidUrl(url) {
+  try {
+    const parsedUrl = new URL(url);
+
+    return (
+      (parsedUrl.protocol === "http:" ||
+        parsedUrl.protocol === "https:") &&
+      parsedUrl.hostname
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+// POST /api/shorturl
+app.post("/api/shorturl", function (req, res) {
   const originalUrl = req.body.url;
 
-  // 1. Check if URL is missing or doesn't start with http:// or https://
-  if (!originalUrl || !/^https?:\/\/.+/.test(originalUrl)) {
-    return res.json({ error: 'invalid url' });
+  // Check URL format
+  if (!originalUrl || !isValidUrl(originalUrl)) {
+    return res.json({
+      error: "invalid url"
+    });
   }
 
-  // 2. Try to parse the URL to validate it
-  try {
-    new URL(originalUrl);
-  } catch (err) {
-    return res.json({ error: 'invalid url' });
-  }
+  const hostname = new URL(originalUrl).hostname;
 
-  // 3. Store the URL and return the JSON response
-  let index = urls.indexOf(originalUrl);
-  if (index === -1) {
-    urls.push(originalUrl);
-    index = urls.length - 1;
-  }
+  // Check that domain exists
+  dns.lookup(hostname, function (error) {
+    if (error) {
+      return res.json({
+        error: "invalid url"
+      });
+    }
 
-  res.json({
-    original_url: originalUrl,
-    short_url: index + 1
+    const shortUrl = counter++;
+
+    const urlObject = {
+      original_url: originalUrl,
+      short_url: shortUrl
+    };
+
+    urlDatabase.push(urlObject);
+
+    return res.json(urlObject);
   });
 });
 
-// GET endpoint to redirect to the original URL
-app.get('/api/shorturl/:short_url', function(req, res) {
+// GET /api/shorturl/:short_url
+app.get("/api/shorturl/:short_url", function (req, res) {
   const shortUrl = Number(req.params.short_url);
 
-  if (!Number.isInteger(shortUrl) || shortUrl < 1 || shortUrl > urls.length) {
-    return res.json({ error: 'No short URL found for the given input' });
+  const foundUrl = urlDatabase.find(function (item) {
+    return item.short_url === shortUrl;
+  });
+
+  if (!foundUrl) {
+    return res.json({
+      error: "invalid url"
+    });
   }
 
-  res.redirect(urls[shortUrl - 1]);
+  return res.redirect(foundUrl.original_url);
 });
 
-app.listen(port, function() {
+app.listen(port, function () {
   console.log(`Listening on port ${port}`);
 });
