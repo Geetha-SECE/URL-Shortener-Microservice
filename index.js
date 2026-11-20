@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const dns = require('dns');
 const app = express();
 
 // Basic Configuration
@@ -34,31 +33,23 @@ app.post('/api/shorturl', function(req, res) {
     return res.json({ error: 'invalid url' });
   }
 
-  // 2. Parse the URL to extract the hostname
-  let hostname;
+  // 2. Try to parse the URL to validate it
   try {
-    hostname = new URL(originalUrl).hostname;
+    new URL(originalUrl);
   } catch (err) {
     return res.json({ error: 'invalid url' });
   }
 
-  // 3. Verify the domain exists via DNS lookup
-  dns.lookup(hostname, (err) => {
-    if (err) {
-      return res.json({ error: 'invalid url' });
-    }
+  // 3. Store the URL and return the JSON response
+  let index = urls.indexOf(originalUrl);
+  if (index === -1) {
+    urls.push(originalUrl);
+    index = urls.length - 1;
+  }
 
-    // 4. Store the URL and return the JSON response
-    let index = urls.indexOf(originalUrl);
-    if (index === -1) {
-      urls.push(originalUrl);
-      index = urls.length - 1;
-    }
-
-    res.json({
-      original_url: originalUrl,
-      short_url: index + 1
-    });
+  res.json({
+    original_url: originalUrl,
+    short_url: index + 1
   });
 });
 
