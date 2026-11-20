@@ -1,95 +1,91 @@
+
 const express = require("express");
 const cors = require("cors");
-const bodyParser = require("body-parser");
-const dns = require("dns");
+const dns = require("node:dns");
+const path = require("node:path");
 
 const app = express();
 
-const port = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors());
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(cors({ optionsSuccessStatus: 200 }));
+app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// Static files
-app.use("/public", express.static(`${process.cwd()}/public`));
+app.use("/public", express.static(path.join(__dirname, "public")));
 
-// Home page
-app.get("/", function (req, res) {
-  res.sendFile(process.cwd() + "/views/index.html");
+const urlDatabase = new Map();
+let nextId = 1;
+
+// Homepage
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "views", "index.html"));
 });
 
-// Store shortened URLs
-const urlDatabase = [];
-let counter = 1;
-
-// Validate URL
-function isValidUrl(url) {
-  try {
-    const parsedUrl = new URL(url);
-
-    return (
-      (parsedUrl.protocol === "http:" ||
-        parsedUrl.protocol === "https:") &&
-      parsedUrl.hostname
-    );
-  } catch (error) {
-    return false;
-  }
-}
-
-// POST /api/shorturl
-app.post("/api/shorturl", function (req, res) {
+// Create short URL
+app.post("/api/shorturl", (req, res) => {
   const originalUrl = req.body.url;
 
-  // Check URL format
-  if (!originalUrl || !isValidUrl(originalUrl)) {
-    return res.json({
-      error: "invalid url"
-    });
+  if (typeof originalUrl !== "string" || !originalUrl.trim()) {
+    return res.json({ error: "invalid url" });
   }
 
-  const hostname = new URL(originalUrl).hostname;
+  let parsedUrl;
 
-  // Check that domain exists
-  dns.lookup(hostname, function (error) {
-    if (error) {
-      return res.json({
-        error: "invalid url"
-      });
+  try {
+    parsedUrl = new URL(originalUrl);
+
+    if (
+      !["http:", "https:"].includes(parsedUrl.protocol) ||
+      !parsedUrl.hostname
+    ) {
+      return res.json({ error: "invalid url" });
+    }
+  } catch {
+    return res.json({ error: "invalid url" });
+  }
+
+  dns.lookup(parsedUrl.hostname, (err) => {
+    if (err) {
+      return res.json({ error: "invalid url" });
     }
 
-    const shortUrl = counter++;
+    // Reuse existing ID
+    for (const [id, savedUrl] of urlDatabase.entries()) {
+      if (savedUrl === originalUrl) {
+        return res.json({
+          original_url: originalUrl,
+          short_url: id
+        });
+      }
+    }
 
-    const urlObject = {
+    const shortUrl = nextId++;
+
+    urlDatabase.set(shortUrl, originalUrl);
+
+    return res.json({
       original_url: originalUrl,
       short_url: shortUrl
-    };
-
-    urlDatabase.push(urlObject);
-
-    return res.json(urlObject);
+    });
   });
 });
 
-// GET /api/shorturl/:short_url
-app.get("/api/shorturl/:short_url", function (req, res) {
-  const shortUrl = Number(req.params.short_url);
+// Redirect
+app.get("/api/shorturl/:short_url", (req, res) => {
+  const id = Number(req.params.short_url);
 
-  const foundUrl = urlDatabase.find(function (item) {
-    return item.short_url === shortUrl;
-  });
+  const originalUrl = urlDatabase.get(id);
 
-  if (!foundUrl) {
+  if (!originalUrl) {
     return res.json({
-      error: "invalid url"
+      error: "No short URL found for the given input"
     });
   }
 
-  return res.redirect(foundUrl.original_url);
+  return res.redirect(originalUrl);
 });
 
-app.listen(port, function () {
-  console.log(`Listening on port ${port}`);
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
